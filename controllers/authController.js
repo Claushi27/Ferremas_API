@@ -1,5 +1,4 @@
-// controllers/authController.js
-const db = require('../config/db');
+const UsuarioModel = require('../models/usuarioModel');
 
 exports.login = (req, res) => {
   const { username, password } = req.body;
@@ -8,9 +7,10 @@ exports.login = (req, res) => {
     return res.status(400).json({ error: 'Falta username o password' });
   }
 
-  const sql = 'SELECT * FROM usuario WHERE username = ? AND password = ?';
-  db.query(sql, [username, password], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Error en la base de datos' });
+  UsuarioModel.verificarCredenciales(username, password, (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Error en la base de datos' });
+    }
 
     if (results.length > 0) {
       return res.status(200).json({ message: 'Inicio de sesión exitoso' });
