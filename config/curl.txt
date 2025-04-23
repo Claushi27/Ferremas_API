@@ -1,0 +1,37 @@
+curl --location --request POST 'http://localhost:3000/login' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "username": "admin",
+  "password": "1234"
+}'
+
+
+curl --location --request POST 'http://localhost:3000/usuarios/crear' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "rut": "12345678-9",
+  "username": "admin",
+  "password": "1234",
+  "nombres": "Juan",
+  "ap_paterno": "Pérez",
+  "ap_materno": "Gómez",
+  "esta_suscrito": "1",
+  "id_rol": 1
+}'
+
+
+curl --location --request PUT 'http://localhost:3000/usuarios/editar/1' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "rut": "12345678-9",
+  "username": "admin",
+  "password": "nuevo1234",
+  "nombres": "Juan Modificado",
+  "ap_paterno": "Pérez",
+  "ap_materno": "Gómez",
+  "esta_suscrito": "1",
+  "id_rol": 1
+}'
+
+
+curl --location --request DELETE 'http://localhost:3000/usuarios/eliminar/1'
