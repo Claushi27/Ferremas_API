@@ -1,6 +1,6 @@
 # API Login con Node.js, Express y MySQL
 
-Este proyecto es una API REST básica que permite realizar un **login** de usuarios a través de un endpoint conectado a una base de datos MySQL. El código está organizado de manera modular para facilitar su mantenimiento y escalabilidad.
+Este proyecto es una API REST básica que permite realizar un **login** de usuarios y gestionar su creación, edición y eliminación, conectándose a una base de datos MySQL. El código está organizado de manera modular para facilitar su mantenimiento y escalabilidad.
 
 ---
 
@@ -25,9 +25,14 @@ api-login-node/
 │
 ├── controllers/
 │   └── authController.js   # Lógica del login
+│   └── usuarioController.js # Controlador para CRUD de usuarios
+│
+├── models/
+│   └── usuarioModel.js     # Consultas a BD para usuarios
 │
 ├── routes/
 │   └── authRoutes.js       # Rutas para /login
+│   └── usuarioRoutes.js    # Rutas para crear, editar, eliminar usuarios
 │
 ├── .env               # Variables de entorno
 ├── index.js           # Arranque de la aplicación
@@ -55,172 +60,121 @@ npm install express mysql dotenv
 
 ## 🗄️ Paso 2: Crear la base de datos y el usuario en MySQL
 
-Abre tu cliente MySQL y ejecuta lo siguiente:
-
 ```sql
--- Crear el esquema
 CREATE SCHEMA `tienda` DEFAULT CHARACTER SET utf8 COLLATE utf8_spanish_ci;
 
--- Crear el usuario
 CREATE USER 'administrador'@'localhost' IDENTIFIED BY 'yR!9uL2@pX';
-
--- Otorgar privilegios
 GRANT ALL PRIVILEGES ON tienda.* TO 'administrador'@'localhost';
 FLUSH PRIVILEGES;
 
--- Asegurar compatibilidad del método de autenticación
 ALTER USER 'administrador'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yR!9uL2@pX';
 FLUSH PRIVILEGES;
+```
 
--- Crear la tabla y un usuario de prueba
-USE tienda;
+### Crear tabla `Usuarios`
 
-CREATE TABLE usuario (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  username VARCHAR(255) NOT NULL,
-  password VARCHAR(255) NOT NULL
+```sql
+CREATE TABLE Usuarios (
+  id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+  rut VARCHAR(12) NOT NULL,
+  username VARCHAR(100) NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  nombres VARCHAR(45) NOT NULL,
+  ap_paterno VARCHAR(45) NOT NULL,
+  ap_materno VARCHAR(45),
+  esta_suscrito VARCHAR(1) NOT NULL DEFAULT '0',
+  id_rol INT NOT NULL,
+  estado TINYINT NOT NULL DEFAULT 1
 );
-
-INSERT INTO usuario (username, password) VALUES ('estudiante', '12345');
 ```
 
 ---
 
-## 🔐 Paso 3: Configuración de variables de entorno
+## 🔐 Variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto con la siguiente configuración:
+Archivo `.env`:
 
 ```env
 DB_HOST=localhost
 DB_USER=administrador
 DB_PASSWORD=yR!9uL2@pX
 DB_NAME=tienda
-PORT=3306
+PORT=3000
 ```
 
 ---
 
-## 📁 Paso 4: Estructurar el proyecto
+## ⚙️ Rutas disponibles
 
-### `index.js`
+### POST `/login`
+Autentica al usuario.
 
-```js
-const express = require('express');
-const app = express();
-const dotenv = require('dotenv');
-dotenv.config();
+### POST `/usuarios/crear`
+Crea un nuevo usuario.
 
-const authRoutes = require('./routes/authRoutes');
+### PUT `/usuarios/editar/:id`
+Edita un usuario por su ID.
 
-app.use(express.json());
-app.use('/login', authRoutes);
-
-app.listen(process.env.PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${process.env.PORT}`);
-});
-```
-
-### `config/db.js`
-
-```js
-const mysql = require('mysql');
-const dotenv = require('dotenv');
-dotenv.config();
-
-const connection = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
-});
-
-connection.connect((err) => {
-  if (err) throw err;
-  console.log('✅ Conectado a la base de datos MySQL');
-});
-
-module.exports = connection;
-```
-
-### `controllers/authController.js`
-
-```js
-const db = require('../config/db');
-
-exports.login = (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Falta username o password' });
-  }
-
-  const sql = 'SELECT * FROM usuario WHERE username = ? AND password = ?';
-  db.query(sql, [username, password], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Error en la base de datos' });
-
-    if (results.length > 0) {
-      return res.status(200).json({ message: 'Inicio de sesión exitoso' });
-    } else {
-      return res.status(401).json({ message: 'Credenciales incorrectas' });
-    }
-  });
-};
-```
-
-### `routes/authRoutes.js`
-
-```js
-const express = require('express');
-const router = express.Router();
-const authController = require('../controllers/authController');
-
-router.post('/', authController.login);
-
-module.exports = router;
-```
+### DELETE `/usuarios/eliminar/:id`
+Elimina un usuario por su ID.
 
 ---
 
-## 🧪 Paso 5: Probar con Postman
+## 📁 Paso 4: Código de ejemplo
 
-1. Inicia el servidor:
+Ya incluido en los archivos `authController.js`, `usuarioController.js`, `usuarioModel.js`, `authRoutes.js`, y `usuarioRoutes.js`.
 
-```bash
-node index.js
-```
+---
 
-2. En Postman, crea una petición:
+## 🧪 Probar con Postman
 
-- **Método:** `POST`
-- **URL:** `http://localhost:3306/login`
-- **Body (JSON):**
-```json
-{
-  "username": "estudiante",
-  "password": "12345"
-}
-```
+### Login
 
-3. Si todo está correcto, deberías recibir:
+- Método: POST
+- URL: `http://localhost:3000/login`
+- Body JSON:
 
 ```json
 {
-  "message": "Inicio de sesión exitoso"
+  "username": "admin",
+  "password": "1234"
 }
 ```
+
+### Crear usuario
+
+```json
+{
+  "rut": "12345678-9",
+  "username": "admin",
+  "password": "1234",
+  "nombres": "Juan",
+  "ap_paterno": "Pérez",
+  "ap_materno": "Gómez",
+  "esta_suscrito": "1",
+  "id_rol": 1
+}
+```
+
+### Editar usuario
+
+PUT a `/usuarios/editar/1`
+
+### Eliminar usuario
+
+DELETE a `/usuarios/eliminar/1`
 
 ---
 
 ## ✅ Próximos pasos y mejoras
 
-- Usar bcrypt para almacenar contraseñas de forma segura
-- Implementar validaciones con Joi
-- Agregar tokens JWT para autenticación
-- Crear rutas protegidas
-- Modularizar aún más el código en servicios
+- Usar bcrypt para contraseñas
+- JWT para autenticación
+- Validaciones con Joi
+- Manejo de errores avanzado
 
 ---
 
 ## 📌 Licencia
 
-Este proyecto es de uso educativo y libre distribución.
+Uso educativo y libre distribución.
