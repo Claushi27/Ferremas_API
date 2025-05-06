@@ -1,10 +1,12 @@
+// routes/usuarioRoutes.js
 const express = require('express');
 const router = express.Router();
 const usuarioController = require('../controllers/usuarioController');
 
-router.post('/login', usuarioController.login);
-router.post('/crear', usuarioController.crear);
-router.put('/editar/:id', usuarioController.editar);
-router.delete('/eliminar/:id', usuarioController.eliminar);
+router.post('/', usuarioController.crear);           // POST /usuarios
+router.get('/', usuarioController.obtenerTodos);      // GET /usuarios
+router.get('/:id', usuarioController.obtenerPorId);   // GET /usuarios/:id
+router.put('/:id', usuarioController.actualizar);     // PUT /usuarios/:id (o PATCH)
+router.delete('/:id', usuarioController.eliminar);    // DELETE /usuarios/:id
 
 module.exports = router;
