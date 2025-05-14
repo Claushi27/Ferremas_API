@@ -79,12 +79,7 @@ exports.obtenerUsuarioPorId = (id, callback) => {
 };
 
 // --- ACTUALIZAR USUARIO (NUEVO) ---
-// Para PATCH, solo actualizamos los campos que vienen.
-// Para PUT, esperaríamos todos los campos y reemplazaríamos. Vamos a hacer un PATCH simple.
 exports.actualizarUsuario = (id, datosUsuario, callback) => {
-  // Construir la query dinámicamente es más complejo.
-  // Este es un ejemplo simple, asumiendo que se pueden actualizar estos campos.
-  // No se actualiza la contraseña aquí, eso requeriría un endpoint separado o lógica adicional.
   let fieldsToUpdate = [];
   let values = [];
 
@@ -106,7 +101,7 @@ exports.actualizarUsuario = (id, datosUsuario, callback) => {
     return callback(null, { affectedRows: 0, message: "No hay campos para actualizar" });
   }
 
-  values.push(id); // Añadir el ID al final para el WHERE
+  values.push(id); 
 
   const query = `UPDATE usuario SET ${fieldsToUpdate.join(', ')} WHERE id_usuario = ?`;
 
@@ -118,8 +113,6 @@ exports.actualizarUsuario = (id, datosUsuario, callback) => {
 
 // --- ELIMINAR USUARIO (NUEVO) ---
 exports.eliminarUsuario = (id, callback) => {
-  // Considerar borrado lógico (cambiar un campo 'estado' a 'inactivo') en lugar de físico.
-  // Para este ejemplo, hacemos borrado físico.
   const query = 'DELETE FROM usuario WHERE id_usuario = ?';
   db.query(query, [id], callback);
 };

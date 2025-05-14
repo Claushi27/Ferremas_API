@@ -9,11 +9,11 @@ exports.crearProducto = (datosProducto, callback) => {
         datosProducto.nombre,
         datosProducto.descripcion,
         datosProducto.precio,
-        datosProducto.id_categoria, // Asegúrate que este ID de categoría exista en la tabla categoria_producto
+        datosProducto.id_categoria,
         datosProducto.codigo_producto,
         datosProducto.marca,
-        datosProducto.es_promocion || false, // Valor por defecto si no se envía
-        datosProducto.es_nuevo || false,   // Valor por defecto si no se envía
+        datosProducto.es_promocion || false,
+        datosProducto.es_nuevo || false,
         datosProducto.imagen_url
     ], (err, results) => {
         if (err) {
@@ -23,9 +23,8 @@ exports.crearProducto = (datosProducto, callback) => {
     });
 };
 
-// Obtener todos los productos
+// Obtener todos los productos (versión original)
 exports.obtenerTodosLosProductos = (callback) => {
-    // Podrías añadir JOIN con categoria_producto para obtener el nombre de la categoría
     const query = `
         SELECT p.*, c.nombre AS nombre_categoria 
         FROM producto p
@@ -34,7 +33,7 @@ exports.obtenerTodosLosProductos = (callback) => {
     db.query(query, callback);
 };
 
-// Obtener un producto por su ID
+// Obtener un producto por su ID (versión original)
 exports.obtenerProductoPorId = (id, callback) => {
     const query = `
         SELECT p.*, c.nombre AS nombre_categoria 
@@ -46,16 +45,15 @@ exports.obtenerProductoPorId = (id, callback) => {
         if (err) {
             return callback(err);
         }
-        callback(null, results[0]); // Devuelve el primer producto o undefined
+        callback(null, results[0]);
     });
 };
 
-// Actualizar un producto por su ID (usando PATCH)
+// Actualizar un producto por su ID
 exports.actualizarProducto = (id, datosProducto, callback) => {
     let fieldsToUpdate = [];
     let values = [];
 
-    // Construir dinámicamente los campos a actualizar
     if (datosProducto.nombre !== undefined) { fieldsToUpdate.push('nombre = ?'); values.push(datosProducto.nombre); }
     if (datosProducto.descripcion !== undefined) { fieldsToUpdate.push('descripcion = ?'); values.push(datosProducto.descripcion); }
     if (datosProducto.precio !== undefined) { fieldsToUpdate.push('precio = ?'); values.push(datosProducto.precio); }
@@ -70,7 +68,7 @@ exports.actualizarProducto = (id, datosProducto, callback) => {
         return callback(null, { affectedRows: 0, message: "No hay campos válidos para actualizar" });
     }
 
-    values.push(id); // Para la cláusula WHERE
+    values.push(id);
 
     const query = `UPDATE producto SET ${fieldsToUpdate.join(', ')} WHERE id_producto = ?`;
     db.query(query, values, (err, result) => {
@@ -83,9 +81,75 @@ exports.actualizarProducto = (id, datosProducto, callback) => {
 
 // Eliminar un producto por su ID
 exports.eliminarProducto = (id, callback) => {
-    // Considerar si hay dependencias (ej. si está en inventario_sucursal o detalle_pedido)
-    // Podrías necesitar borrar esas referencias primero o configurar ON DELETE CASCADE/SET NULL en la BD.
-    // Por ahora, un borrado simple.
     const query = 'DELETE FROM producto WHERE id_producto = ?';
     db.query(query, [id], callback);
+};
+
+// --- FUNCIONES PARA API N°2 (Consulta de Productos según Anexo) ---
+
+/**
+ * Obtener un producto por su ID incluyendo el stock total.
+ * El stock total se calcula sumando el stock de todas las sucursales.
+ */
+exports.obtenerProductoPorIdConStock = (id, callback) => {
+    const query = `
+        SELECT 
+            p.id_producto,
+            p.nombre,
+            p.descripcion,
+            p.precio,
+            p.id_categoria,
+            cat.nombre AS nombre_categoria,
+            p.codigo_producto,
+            p.marca,
+            p.es_promocion,
+            p.es_nuevo,
+            p.imagen_url,
+            p.fecha_creacion,
+            COALESCE(SUM(inv.stock), 0) AS stock_total 
+        FROM producto p
+        LEFT JOIN categoria_producto cat ON p.id_categoria = cat.id_categoria
+        LEFT JOIN inventario_sucursal inv ON p.id_producto = inv.id_producto
+        WHERE p.id_producto = ?
+        GROUP BY p.id_producto, p.nombre, p.descripcion, p.precio, p.id_categoria, cat.nombre, 
+                 p.codigo_producto, p.marca, p.es_promocion, p.es_nuevo, p.imagen_url, p.fecha_creacion;
+    `;
+    // Se agrupa por todos los campos no agregados para asegurar la correcta suma del stock.
+    db.query(query, [id], (err, results) => {
+        if (err) {
+            return callback(err);
+        }
+        callback(null, results[0]); // Devuelve el producto o undefined
+    });
+};
+
+/**
+ * Obtener todos los productos incluyendo el stock total para cada uno.
+ * El stock total se calcula sumando el stock de todas las sucursales para cada producto.
+ */
+exports.obtenerTodosLosProductosConStock = (callback) => {
+    const query = `
+        SELECT 
+            p.id_producto,
+            p.nombre,
+            p.descripcion,
+            p.precio,
+            p.id_categoria,
+            cat.nombre AS nombre_categoria,
+            p.codigo_producto,
+            p.marca,
+            p.es_promocion,
+            p.es_nuevo,
+            p.imagen_url,
+            p.fecha_creacion,
+            COALESCE(SUM(inv.stock), 0) AS stock_total
+        FROM producto p
+        LEFT JOIN categoria_producto cat ON p.id_categoria = cat.id_categoria
+        LEFT JOIN inventario_sucursal inv ON p.id_producto = inv.id_producto
+        GROUP BY p.id_producto, p.nombre, p.descripcion, p.precio, p.id_categoria, cat.nombre, 
+                 p.codigo_producto, p.marca, p.es_promocion, p.es_nuevo, p.imagen_url, p.fecha_creacion
+        ORDER BY p.nombre ASC; 
+    `;
+    // Se agrupa por todos los campos no agregados.
+    db.query(query, callback);
 };
