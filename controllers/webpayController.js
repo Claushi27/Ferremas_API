@@ -2,6 +2,7 @@
 const webpayService = require('../services/webpayService');
 const PedidoModel = require('../models/pedidoModel');     
 const PagoModel = require('../models/pagoModel');     
+const InventarioModel = require('../models/inventarioSucursalModel'); // <-- AÑADIDO: Importa el modelo de inventario
 const db = require('../config/db'); // Necesario para la consulta temporal de pedido
 
 const ID_METODO_PAGO_WEBPAY = 4; // IMPORTANTE: Ajusta este ID al que tengas para "Webpay" en tu tabla metodo_pago
@@ -86,10 +87,10 @@ exports.retornoWebpay = async (req, res) => {
     let redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&mensaje=Error%20desconocido`;
 
     // --- Lógica principal: Primero chequear TBK_TOKEN (anulación/abandono), luego token_ws (confirmación) ---
-    if (tbkToken) { 
+    if (tbkToken) { // Este es el flujo de anulación o error temprano
         console.log(`[WebpayController] Flujo de Anulación/Abandono. TBK_TOKEN: ${tbkToken}`);
         
-        if (tbkOrdenCompra) { 
+        if (tbkOrdenCompra) { // Si la orden de compra viene en el TBK_TOKEN/QUERY
             try {
                 console.log(`[WebpayController] En flujo de Anulación, buscando pedido por numero_compra: "${tbkOrdenCompra}"`);
 
@@ -111,7 +112,7 @@ exports.retornoWebpay = async (req, res) => {
 
                 if (pedidoParaActualizar) {
                     await new Promise((resolve, reject) => {
-                        PedidoModel.actualizarPedido(pedidoParaActualizar, { id_estado: 8, comentarios: `Pago anulado/abandonado por usuario. TBK_TOKEN: ${tbkToken}` }, (errUpdate, resultUpdate) => { 
+                        PedidoModel.actualizarPedido(pedidoParaActualizar, { id_estado: 8, comentarios: `Pago anulado/abandonado por usuario. TBK_TOKEN: ${tbkToken}` }, (errUpdate, resultUpdate) => { // Asume id_estado 8 es 'Cancelado' o 'Fallido'
                             if (errUpdate) console.error("Error actualizando pedido a cancelado:", errUpdate);
                             resolve(resultUpdate);
                         });
@@ -127,20 +128,20 @@ exports.retornoWebpay = async (req, res) => {
         redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=anulado&mensaje=Pago%20anulado%20por%20el%20usuario`;
         return res.redirect(redirectUrl);
 
-    } else if (tokenWs) { 
+    } else if (tokenWs) { // Este es el flujo de confirmación (normalmente POST con token_ws)
         console.log(`[WebpayController] Flujo de Confirmación de Transacción. token_ws: ${tokenWs}`);
         let commitResponse;
         let isTransactionSuccessful = false; 
         let transactionDetails = {}; 
 
         try {
-            commitResponse = await webpayService.confirmarTransaccionWebpay(tokenWs); 
+            commitResponse = await webpayService.confirmarTransaccionWebpay(tokenWs);
             console.log("[WebpayController] Respuesta del commit:", commitResponse);
 
             // Extraer y validar los detalles clave de la respuesta de commit defensivamente
             const commitStatus = commitResponse?.status || 'UNKNOWN';
             // CORREGIDO: Usar response_code con guion bajo
-            const commitResponseCode = commitResponse?.response_code; 
+            const commitResponseCode = commitResponse?.response_code;
             const commitBuyOrder = commitResponse?.buy_order || 'N/A';
             const commitAmount = commitResponse?.amount || 0;
             const commitAuthorizationCode = commitResponse?.authorization_code || null; 
@@ -149,7 +150,7 @@ exports.retornoWebpay = async (req, res) => {
 
             // NUEVO CONSOLE.LOG para depurar tipos de datos
             console.log(`[WebpayController] Tipo de commitResponse.status: ${typeof commitStatus}, valor: ${commitStatus}`);
-            console.log(`[WebpayController] Tipo de commitResponse.response_code: ${typeof commitResponseCode}, valor: ${commitResponseCode}`); 
+            console.log(`[WebpayController] Tipo de commitResponse.response_code: ${typeof commitResponseCode}, valor: ${commitResponseCode}`);
 
 
             // Definir el éxito de la transacción
@@ -206,6 +207,7 @@ exports.retornoWebpay = async (req, res) => {
             if (isTransactionSuccessful) {
                 console.log(`[WebpayController] Pago APROBADO para buyOrder: ${transactionDetails.buyOrder}, monto: ${transactionDetails.amount}`);
 
+                // 1. Actualizar estado del pedido a 'Pagado' (ID 3)
                 await new Promise((resolve, reject) => {
                     PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 3 }, (err, result) => {
                         if (err) return reject(err);
@@ -213,38 +215,94 @@ exports.retornoWebpay = async (req, res) => {
                     });
                 });
 
+                // 2. Crear registro de pago
                 const datosPago = {
                     id_pedido: idPedidoOriginal,
                     id_metodo: ID_METODO_PAGO_WEBPAY,
                     estado: 'Completado',
                     fecha_pago: transactionDetails.transactionDate,
                     monto: transactionDetails.amount,
-                    referencia_transaccion: transactionDetails.authorizationCode,
+                    referencia_transaccion: `${transactionDetails.authorizationCode}-${Date.now()}`, // Genera una referencia única
                     comprobante_url: null,
                     id_moneda: idMonedaOriginal
                 };
                 
-                // --- CONSOLE.LOG PARA LOS DATOS DEL PAGO ANTES DE INSERTAR ---
-                console.log("[WebpayController] Intentando crear registro de pago con datos:", datosPago);
+                console.log("[WebpayController] Intentando crear registro de pago con datos:", datosPago); // Log de datos antes de insertar
 
                 await new Promise((resolve, reject) => {
-                    PagoModel.crearPago(datosPago, (err, result) => {
+                    PagoModel.crearPago(datosPago, (err, result) => { // Llama al modelo para crear pago
                         if (err) {
-                            // --- CONSOLE.ERROR AQUÍ PARA CAPTURAR EL ERROR REAL DE INSERCIÓN ---
+                            // CONSOLE.ERROR para capturar el error REAL de inserción del pago
                             console.error("[WebpayController] ERROR CRÍTICO al crear registro de pago:", err);
                             return reject(err); // Propaga el error para que sea capturado
                         }
-                        console.log("[WebpayController] Registro de pago creado exitosamente. InsertId:", result);
+                        console.log("[WebpayController] Registro de pago creado exitosamente. InsertId:", result); // Log de éxito
                         resolve(result);
                     });
                 });
-                // ... (resto del código) ...
+
+                // 3. REDUCIR STOCK EN EL INVENTARIO
+                console.log("[WebpayController] Iniciando reducción de stock para el pedido:", idPedidoOriginal);
+                const pedidoCompleto = await new Promise((resolve, reject) => {
+                    PedidoModel.obtenerPedidoConDetallesPorId(idPedidoOriginal, (err, data) => { // Obtiene detalles del pedido
+                        if (err) {
+                            console.error("[WebpayController] ERROR al obtener detalles del pedido para reducción de stock:", err);
+                            return reject(new Error('Error al obtener detalles del pedido para reducir stock.'));
+                        }
+                        if (!data) {
+                            console.warn("[WebpayController] Pedido no encontrado al intentar reducir stock.");
+                            return reject(new Error('Pedido no encontrado al intentar reducir stock.'));
+                        }
+                        resolve(data);
+                    });
+                });
+
+                if (pedidoCompleto.detalles && pedidoCompleto.detalles.length > 0) {
+                    const idSucursalReduccion = pedidoCompleto.id_sucursal || 1; // Default a sucursal 1 si es null
+
+                    for (const item of pedidoCompleto.detalles) {
+                        const idProducto = item.id_producto;
+                        const cantidadComprada = item.cantidad;
+
+                        console.log(`[WebpayController] Reduciendo stock: Producto ID ${idProducto}, Cantidad ${cantidadComprada} en Sucursal ID ${idSucursalReduccion}`);
+
+                        await new Promise((resolve, reject) => {
+                            InventarioModel.obtenerStockProductoEnSucursal(idProducto, idSucursalReduccion, (errGet, inventarioActual) => {
+                                if (errGet || !inventarioActual) {
+                                    console.error(`[WebpayController] ERROR al obtener stock actual para Producto ID ${idProducto}:`, errGet || 'No encontrado');
+                                    return reject(new Error(`No se pudo obtener stock actual para producto ${idProducto}.`));
+                                }
+                                const nuevoStock = inventarioActual.stock - cantidadComprada;
+                                if (nuevoStock < 0) {
+                                    console.warn(`[WebpayController] ADVERTENCIA: Stock insuficiente para Producto ID ${idProducto}. Stock actual: ${inventarioActual.stock}, Cantidad comprada: ${cantidadComprada}`);
+                                    return reject(new Error(`Stock insuficiente para producto ${idProducto}.`));
+                                }
+                                InventarioModel.actualizarStockPorIdInventario( // Actualiza el stock
+                                    inventarioActual.id_inventario, 
+                                    { stock: nuevoStock },
+                                    (errUpdateStock, resultUpdateStock) => {
+                                        if (errUpdateStock) {
+                                            console.error(`[WebpayController] ERROR final al actualizar stock de Producto ID ${idProducto}:`, errUpdateStock);
+                                            return reject(new Error(`Fallo al actualizar stock final para producto ${idProducto}: ${errUpdateStock.message}`));
+                                        }
+                                        console.log(`[WebpayController] Stock actualizado para Producto ID ${idProducto}: Nuevo stock ${nuevoStock}`);
+                                        resolve(resultUpdateStock);
+                                    }
+                                );
+                            });
+                        });
+                    }
+                } else {
+                    console.warn("[WebpayController] Pedido sin detalles de productos. No se redujo el stock.");
+                }
+                // --- FIN REDUCCIÓN DE STOCK ---
+
                 redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=exito&orden=${transactionDetails.buyOrder}&monto=${transactionDetails.amount}`;
-            } else {
+            } else { // Pago RECHAZADO o con ERROR
                 console.log(`[WebpayController] Pago RECHAZADO/ERROR para buyOrder: ${transactionDetails.buyOrder}, status: ${transactionDetails.status}, responseCode: ${transactionDetails.responseCode}`);
                 await new Promise((resolve, reject) => {
                     // Actualizar pedido a 'Pago Fallido' (id_estado = 8)
-                    PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 8, comentarios: `Pago rechazado. Código: ${transactionDetails.responseCode}. Transbank Status: ${transactionDetails.status}` }, (err, result) => { 
+                    PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 8, comentarios: `Pago rechazado. Código: ${transactionDetails.responseCode}. Transbank Status: ${transactionDetails.status}` }, (err, result) => {
                          if (err) console.error("Error actualizando pedido a fallido:", err);
                         resolve(result);
                     });
