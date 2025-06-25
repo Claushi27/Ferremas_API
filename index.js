@@ -19,8 +19,8 @@ const clienteRoutes = require('./routes/clienteRoutes');
 const consultaClienteRoutes = require('./routes/consultaClienteRoutes');
 const tasaCambioRoutes = require('./routes/tasaCambioRoutes');
 const pagoRoutes = require('./routes/pagoRoutes');
+const metodoPagoRoutes = require('./routes/metodoPagoRoutes');
 
-// Nuevas Rutas que hemos añadido
 const promocionRoutes = require('./routes/promocionRoutes');    // Para el CRUD de Promociones
 const webpayRoutes = require('./routes/webpayRoutes');        // Para la integración con Webpay
 
@@ -46,6 +46,7 @@ app.use('/api/tasas-cambio', tasaCambioRoutes);
 app.use('/api/promociones', promocionRoutes);        
 app.use('/api/pagos/webpay', webpayRoutes);    
 app.use('/api/pagos', pagoRoutes);
+app.use('/api/metodos-pago', metodoPagoRoutes);
 
 const PORT = process.env.PORT || 3000;
 

@@ -1,7 +1,7 @@
 // controllers/pagoController.js
-const PagoModel = require('../models/pagoModel');
+const PagoModel = require('../models/pagoModel'); // Asegúrate de que esta línea esté presente
 
-// Obtener todos los pagos (ya existente)
+// Obtener todos los pagos
 exports.obtenerTodos = (req, res) => {
     PagoModel.obtenerTodosLosPagos((err, pagos) => {
         if (err) {
@@ -12,7 +12,7 @@ exports.obtenerTodos = (req, res) => {
     });
 };
 
-// Obtener un pago por su ID (ya existente)
+// Obtener un pago por su ID
 exports.obtenerPorId = (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -30,7 +30,9 @@ exports.obtenerPorId = (req, res) => {
     });
 };
 
-// NUEVO: Obtener pagos asociados a un pedido específico
+// MODIFICACIÓN CLAVE AQUÍ: Obtener pagos asociados a un pedido específico
+// Antes: Devolvía 404 si no encontraba pagos
+// Ahora: Devolverá 200 OK con un array vacío [] si no encuentra pagos
 exports.obtenerPagosPorPedido = (req, res) => {
     const id_pedido = parseInt(req.params.id_pedido);
     if (isNaN(id_pedido)) {
@@ -41,10 +43,7 @@ exports.obtenerPagosPorPedido = (req, res) => {
             console.error(`Error al obtener pagos para el pedido ${id_pedido}:`, err);
             return res.status(500).json({ error: 'Error interno al obtener los pagos del pedido.' });
         }
-        if (!pagos || pagos.length === 0) {
-            return res.status(404).json({ message: 'No se encontraron pagos para este pedido.' });
-        }
-        res.status(200).json(pagos);
+        // CAMBIO CLAVE: Siempre devuelve 200 OK, y un array vacío si no hay pagos
+        res.status(200).json(pagos || []); //
     });
 };
-

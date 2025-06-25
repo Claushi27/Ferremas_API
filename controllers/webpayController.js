@@ -2,13 +2,16 @@
 const webpayService = require('../services/webpayService');
 const PedidoModel = require('../models/pedidoModel');     
 const PagoModel = require('../models/pagoModel');     
-const db = require('../config/db'); 
+const db = require('../config/db'); // Necesario para la consulta temporal de pedido
 
-const ID_METODO_PAGO_WEBPAY = 4; 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'; 
+const ID_METODO_PAGO_WEBPAY = 4; // IMPORTANTE: Ajusta este ID al que tengas para "Webpay" en tu tabla metodo_pago
+
+// URL base de tu frontend para redirecciones (ajusta según sea necesario)
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'; // Asegúrate que esta URL sea la de tu frontend
 
 /**
  * Crea (inicia) una transacción en Webpay.
+ * Recibe id_pedido para obtener monto y generar datos para Webpay.
  */
 exports.crearTransaccion = async (req, res) => {
     const { id_pedido } = req.body;
@@ -18,11 +21,13 @@ exports.crearTransaccion = async (req, res) => {
     }
 
     try {
+        // 1. Obtener detalles del pedido desde tu base de datos
         const pedido = await new Promise((resolve, reject) => {
-            PedidoModel.obtenerPedidoConDetallesPorId(id_pedido, (err, data) => { 
+            PedidoModel.obtenerPedidoConDetallesPorId(id_pedido, (err, data) => { // Usa tu función de modelo
                 if (err) return reject(new Error('Error al obtener el pedido.'));
                 if (!data) return reject(new Error(`Pedido con ID ${id_pedido} no encontrado.`));
-                if (data.id_estado === 3) { 
+                // Validar si el pedido ya fue pagado o está en un estado que no permite pagar
+                if (data.id_estado === 3) { // Asumiendo que 3 es 'Pagado'
                      return reject(new Error(`El pedido ${id_pedido} ya ha sido pagado.`));
                 }
                 resolve(data);
@@ -30,17 +35,23 @@ exports.crearTransaccion = async (req, res) => {
         });
 
         const buyOrder = pedido.numero_compra;        
-        const sessionId = `SESS-${pedido.id_pedido}-${Date.now()}`; 
-        const amount = Math.round(pedido.total_con_impuesto); 
-        const returnUrl = `${req.protocol}://${req.get('host')}/api/pagos/webpay/retorno`;
+        const sessionId = `SESS-${pedido.id_pedido}-${Date.now()}`; // Sesión única para Transbank
+        const amount = Math.round(pedido.total_con_impuesto); // Monto total del pedido, Transbank espera enteros para CLP.
+        const returnUrl = `${req.protocol}://${req.get('host')}/api/pagos/webpay/retorno`; // URL de retorno a este backend
 
-        const webpayResponse = await webpayService.iniciarTransaccionWebpay(buyOrder, sessionId, amount, returnUrl); 
+        // 2. Iniciar transacción con Webpay
+        const webpayResponse = await webpayService.iniciarTransaccionWebpay(buyOrder, sessionId, amount, returnUrl);
 
+        // Aquí podrías guardar temporalmente el buyOrder o el token de Webpay asociado a tu id_pedido
+        // para verificarlo en el retorno, aunque el commit se hace con el token_ws.
+        // Por ejemplo, podrías actualizar el pedido con un estado "Pendiente de pago Webpay" y el token.
+
+        // 3. Devolver URL y Token al frontend para la redirección
         res.status(200).json({
             url_webpay: webpayResponse.url,
-            token_ws: webpayResponse.token,
-            buy_order: buyOrder,
-            session_id: sessionId
+            token_ws: webpayResponse.token, // Este es el token que el frontend debe enviar a la URL de Webpay
+            buy_order: buyOrder, // Opcional, para referencia del frontend
+            session_id: sessionId // Opcional
         });
 
     } catch (error) {
@@ -51,6 +62,7 @@ exports.crearTransaccion = async (req, res) => {
 
 /**
  * Maneja el retorno de Webpay después de que el usuario interactúa con la plataforma de pago.
+ * Confirma la transacción con Transbank y actualiza el estado del pedido y pago.
  */
 exports.retornoWebpay = async (req, res) => {
     // --- CONSOLE.LOGS INICIALES PARA DEPURACIÓN ---
@@ -63,7 +75,7 @@ exports.retornoWebpay = async (req, res) => {
     // Extracción SÚPER DEFENSIVA de tokens
     const tokenWs = (req.method === 'POST' ? req.body?.token_ws : req.query?.token_ws) || null;
     const tbkToken = (req.method === 'POST' ? req.body?.TBK_TOKEN : req.query?.TBK_TOKEN) || null;
-    const tbkOrdenCompra = (req.method === 'POST' ? req.body?.TBK_ORDEN_COMPura : req.query?.TBK_ORDEN_COMPRA) || null; // Corregido: TBK_ORDEN_COMPRA
+    const tbkOrdenCompra = (req.method === 'POST' ? req.body?.TBK_ORDEN_COMPRA : req.query?.TBK_ORDEN_COMPRA) || null; // Corregido: TBK_ORDEN_COMPRA
 
 
     console.log("[WebpayController] Tokens extraídos (defensivo):");
@@ -128,16 +140,16 @@ exports.retornoWebpay = async (req, res) => {
             // Extraer y validar los detalles clave de la respuesta de commit defensivamente
             const commitStatus = commitResponse?.status || 'UNKNOWN';
             // CORREGIDO: Usar response_code con guion bajo
-            const commitResponseCode = commitResponse?.response_code; // <--- CAMBIO CLAVE AQUÍ
+            const commitResponseCode = commitResponse?.response_code; 
             const commitBuyOrder = commitResponse?.buy_order || 'N/A';
             const commitAmount = commitResponse?.amount || 0;
-            const commitAuthorizationCode = commitResponse?.authorization_code || null; // Corregido: authorization_code
-            const commitTransactionDate = commitResponse?.transaction_date || new Date().toISOString(); // Corregido: transaction_date
+            const commitAuthorizationCode = commitResponse?.authorization_code || null; 
+            const commitTransactionDate = commitResponse?.transaction_date || new Date().toISOString(); 
 
 
             // NUEVO CONSOLE.LOG para depurar tipos de datos
             console.log(`[WebpayController] Tipo de commitResponse.status: ${typeof commitStatus}, valor: ${commitStatus}`);
-            console.log(`[WebpayController] Tipo de commitResponse.response_code: ${typeof commitResponseCode}, valor: ${commitResponseCode}`); // Corregido el log
+            console.log(`[WebpayController] Tipo de commitResponse.response_code: ${typeof commitResponseCode}, valor: ${commitResponseCode}`); 
 
 
             // Definir el éxito de la transacción
@@ -147,7 +159,7 @@ exports.retornoWebpay = async (req, res) => {
             // Capturar detalles para usar después
             transactionDetails = {
                 status: commitStatus,
-                responseCode: commitResponseCode, // Usar el nombre corregido aquí también
+                responseCode: commitResponseCode, 
                 buyOrder: commitBuyOrder,
                 amount: commitAmount,
                 authorizationCode: commitAuthorizationCode,
@@ -195,7 +207,7 @@ exports.retornoWebpay = async (req, res) => {
                 console.log(`[WebpayController] Pago APROBADO para buyOrder: ${transactionDetails.buyOrder}, monto: ${transactionDetails.amount}`);
 
                 await new Promise((resolve, reject) => {
-                    PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 3 }, (err, result) => { 
+                    PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 3 }, (err, result) => {
                         if (err) return reject(err);
                         resolve(result);
                     });
@@ -211,12 +223,22 @@ exports.retornoWebpay = async (req, res) => {
                     comprobante_url: null,
                     id_moneda: idMonedaOriginal
                 };
+                
+                // --- CONSOLE.LOG PARA LOS DATOS DEL PAGO ANTES DE INSERTAR ---
+                console.log("[WebpayController] Intentando crear registro de pago con datos:", datosPago);
+
                 await new Promise((resolve, reject) => {
-                    PagoModel.crearPago(datosPago, (err, result) => { 
-                        if (err) return reject(err);
+                    PagoModel.crearPago(datosPago, (err, result) => {
+                        if (err) {
+                            // --- CONSOLE.ERROR AQUÍ PARA CAPTURAR EL ERROR REAL DE INSERCIÓN ---
+                            console.error("[WebpayController] ERROR CRÍTICO al crear registro de pago:", err);
+                            return reject(err); // Propaga el error para que sea capturado
+                        }
+                        console.log("[WebpayController] Registro de pago creado exitosamente. InsertId:", result);
                         resolve(result);
                     });
                 });
+                // ... (resto del código) ...
                 redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=exito&orden=${transactionDetails.buyOrder}&monto=${transactionDetails.amount}`;
             } else {
                 console.log(`[WebpayController] Pago RECHAZADO/ERROR para buyOrder: ${transactionDetails.buyOrder}, status: ${transactionDetails.status}, responseCode: ${transactionDetails.responseCode}`);
