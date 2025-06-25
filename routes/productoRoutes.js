@@ -13,5 +13,6 @@ router.get('/:id', productoController.obtenerPorIdParaAnexo);  // GET /api/produ
 router.post('/', productoController.crear);          // POST /api/productos
 router.put('/:id', productoController.actualizar);    // PUT /api/productos/:id (o usa PATCH)
 router.delete('/:id', productoController.eliminar);   // DELETE /api/productos/:id
+router.patch('/:id', productoController.actualizar);
 
 module.exports = router;

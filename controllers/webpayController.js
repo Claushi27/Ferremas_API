@@ -1,16 +1,14 @@
 // controllers/webpayController.js
 const webpayService = require('../services/webpayService');
-const PedidoModel = require('../models/pedidoModel'); // Asume que tienes este modelo
-const PagoModel = require('../models/pagoModel');     // Asume que tienes este modelo
+const PedidoModel = require('../models/pedidoModel');     
+const PagoModel = require('../models/pagoModel');     
+const db = require('../config/db'); 
 
-const ID_METODO_PAGO_WEBPAY = 4; // IMPORTANTE: Ajusta este ID al que tengas para "Webpay" en tu tabla metodo_pago
-
-// URL base de tu frontend para redirecciones (ajusta según sea necesario)
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080'; // O el puerto de tu frontend
+const ID_METODO_PAGO_WEBPAY = 4; 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'; 
 
 /**
  * Crea (inicia) una transacción en Webpay.
- * Recibe id_pedido para obtener monto y generar datos para Webpay.
  */
 exports.crearTransaccion = async (req, res) => {
     const { id_pedido } = req.body;
@@ -20,36 +18,29 @@ exports.crearTransaccion = async (req, res) => {
     }
 
     try {
-        // 1. Obtener detalles del pedido desde tu base de datos
         const pedido = await new Promise((resolve, reject) => {
-            PedidoModel.obtenerPedidoConDetallesPorId(id_pedido, (err, data) => { // Usa tu función de modelo
+            PedidoModel.obtenerPedidoConDetallesPorId(id_pedido, (err, data) => { 
                 if (err) return reject(new Error('Error al obtener el pedido.'));
                 if (!data) return reject(new Error(`Pedido con ID ${id_pedido} no encontrado.`));
-                // Validar si el pedido ya fue pagado o está en un estado que no permite pagar
-                if (data.id_estado === 3) { // Asumiendo que 3 es 'Pagado'
+                if (data.id_estado === 3) { 
                      return reject(new Error(`El pedido ${id_pedido} ya ha sido pagado.`));
                 }
                 resolve(data);
             });
         });
 
-        const buyOrder = pedido.numero_compra;        const sessionId = `SESS-${pedido.id_pedido}-${Date.now()}`; // Sesión única para Transbank
-        const amount = Math.round(pedido.total_con_impuesto); // Monto total del pedido, Transbank espera enteros para CLP.
-        const returnUrl = `${req.protocol}://${req.get('host')}/api/pagos/webpay/retorno`; // URL de retorno a este backend
+        const buyOrder = pedido.numero_compra;        
+        const sessionId = `SESS-${pedido.id_pedido}-${Date.now()}`; 
+        const amount = Math.round(pedido.total_con_impuesto); 
+        const returnUrl = `${req.protocol}://${req.get('host')}/api/pagos/webpay/retorno`;
 
-        // 2. Iniciar transacción con Webpay
-        const webpayResponse = await webpayService.iniciarTransaccionWebpay(buyOrder, sessionId, amount, returnUrl);
+        const webpayResponse = await webpayService.iniciarTransaccionWebpay(buyOrder, sessionId, amount, returnUrl); 
 
-        // Aquí podrías guardar temporalmente el buyOrder o el token de Webpay asociado a tu id_pedido
-        // para verificarlo en el retorno, aunque el commit se hace con el token_ws.
-        // Por ejemplo, podrías actualizar el pedido con un estado "Pendiente de pago Webpay" y el token.
-
-        // 3. Devolver URL y Token al frontend para la redirección
         res.status(200).json({
             url_webpay: webpayResponse.url,
-            token_ws: webpayResponse.token, // Este es el token que el frontend debe enviar a la URL de Webpay
-            buy_order: buyOrder, // Opcional, para referencia del frontend
-            session_id: sessionId // Opcional
+            token_ws: webpayResponse.token,
+            buy_order: buyOrder,
+            session_id: sessionId
         });
 
     } catch (error) {
@@ -60,106 +51,197 @@ exports.crearTransaccion = async (req, res) => {
 
 /**
  * Maneja el retorno de Webpay después de que el usuario interactúa con la plataforma de pago.
- * Confirma la transacción con Transbank y actualiza el estado del pedido y pago.
  */
 exports.retornoWebpay = async (req, res) => {
-    const tokenWs = req.body.token_ws; // Webpay POSTea el token_ws a esta URL
-    const tbkToken = req.body.TBK_TOKEN; // Token si el pago fue anulado o abandonado
-    // Otros tokens posibles: TBK_ID_SESION, TBK_ORDEN_COMPRA
+    // --- CONSOLE.LOGS INICIALES PARA DEPURACIÓN ---
+    console.log("\n--- INICIO RETORNO WEBPAY ---");
+    console.log("Método de solicitud:", req.method); 
+    console.log("req.body recibido (raw):", req.body); 
+    console.log("req.query recibido (raw):", req.query); 
+    console.log("--- FIN CONSOLE.LOGS DEPURACIÓN INICIAL ---\n");
 
-    console.log("[WebpayController] Retorno Webpay recibido:");
+    // Extracción SÚPER DEFENSIVA de tokens
+    const tokenWs = (req.method === 'POST' ? req.body?.token_ws : req.query?.token_ws) || null;
+    const tbkToken = (req.method === 'POST' ? req.body?.TBK_TOKEN : req.query?.TBK_TOKEN) || null;
+    const tbkOrdenCompra = (req.method === 'POST' ? req.body?.TBK_ORDEN_COMPura : req.query?.TBK_ORDEN_COMPRA) || null; // Corregido: TBK_ORDEN_COMPRA
+
+
+    console.log("[WebpayController] Tokens extraídos (defensivo):");
     console.log("token_ws:", tokenWs);
-    console.log("TBK_TOKEN (anulación/abandono):", tbkToken);
+    console.log("TBK_TOKEN:", tbkToken);
+    console.log("TBK_ORDEN_COMPRA:", tbkOrdenCompra);
+    
+    let redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&mensaje=Error%20desconocido`;
 
-    let redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&mensaje=Error%20desconocido`; // URL por defecto
+    // --- Lógica principal: Primero chequear TBK_TOKEN (anulación/abandono), luego token_ws (confirmación) ---
+    if (tbkToken) { 
+        console.log(`[WebpayController] Flujo de Anulación/Abandono. TBK_TOKEN: ${tbkToken}`);
+        
+        if (tbkOrdenCompra) { 
+            try {
+                console.log(`[WebpayController] En flujo de Anulación, buscando pedido por numero_compra: "${tbkOrdenCompra}"`);
 
-    if (tbkToken) { // El usuario anuló el pago o hubo un error antes de confirmar con tarjeta
-        console.log(`[WebpayController] Pago anulado o abandonado por el usuario. TBK_TOKEN: ${tbkToken}`);
-        // Aquí podrías querer buscar el pedido asociado al TBK_ORDEN_COMPRA o TBK_ID_SESION si los guardaste
-        // y actualizar su estado a "Pago Anulado por Usuario" o similar.
+                const pedidoParaActualizar = await new Promise((resolve, reject) => {
+                    db.query("SELECT id_pedido FROM pedido WHERE numero_compra = ? ORDER BY id_pedido DESC LIMIT 1", [tbkOrdenCompra], (err, results) => {
+                        if (err) {
+                            console.error("[WebpayController] ERROR en consulta DB al buscar pedido para ANULACIÓN:", err);
+                            resolve(null); 
+                        }
+                        if (results.length === 0) {
+                            console.warn(`[WebpayController] Pedido para anulación con numero_compra "${tbkOrdenCompra}" NO ENCONTRADO en la BD.`);
+                            resolve(null); 
+                        } else {
+                           console.log(`[WebpayController] Pedido para anulación con numero_compra "${tbkOrdenCompra}" ENCONTRADO. ID: ${results[0].id_pedido}`);
+                           resolve(results[0].id_pedido);
+                        }
+                    });
+                });
+
+                if (pedidoParaActualizar) {
+                    await new Promise((resolve, reject) => {
+                        PedidoModel.actualizarPedido(pedidoParaActualizar, { id_estado: 8, comentarios: `Pago anulado/abandonado por usuario. TBK_TOKEN: ${tbkToken}` }, (errUpdate, resultUpdate) => { 
+                            if (errUpdate) console.error("Error actualizando pedido a cancelado:", errUpdate);
+                            resolve(resultUpdate);
+                        });
+                    });
+                }
+            } catch (updateErr) {
+                console.error("[WebpayController] Falló la actualización de pedido tras anulación:", updateErr.message);
+            }
+        } else {
+            console.warn("[WebpayController] TBK_ORDEN_COMPRA no disponible para actualizar pedido tras anulación.");
+        }
+
         redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=anulado&mensaje=Pago%20anulado%20por%20el%20usuario`;
         return res.redirect(redirectUrl);
-    }
 
-    if (!tokenWs) {
-        console.error("[WebpayController] No se recibió token_ws en el retorno de Webpay.");
-        // Esto podría pasar si el usuario cierra la ventana de Webpay sin completar o anular.
-        redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&mensaje=No%20se%20completo%20el%20proceso%20de%20pago`;
-        return res.redirect(redirectUrl);
-    }
+    } else if (tokenWs) { 
+        console.log(`[WebpayController] Flujo de Confirmación de Transacción. token_ws: ${tokenWs}`);
+        let commitResponse;
+        let isTransactionSuccessful = false; 
+        let transactionDetails = {}; 
 
-    try {
-        const commitResponse = await webpayService.confirmarTransaccionWebpay(tokenWs);
-        console.log("[WebpayController] Respuesta del commit:", commitResponse);
+        try {
+            commitResponse = await webpayService.confirmarTransaccionWebpay(tokenWs); 
+            console.log("[WebpayController] Respuesta del commit:", commitResponse);
 
-        // Recuperar el id_pedido original. El buyOrder que generaste contenía el numero_compra.
-        // Necesitas una forma de mapear commitResponse.buyOrder de vuelta a tu id_pedido.
-        // Si tu buyOrder fue `FERREMAS-${pedido.numero_compra}-${timestamp}`,
-        // podrías extraer el numero_compra y buscar el pedido.
-        // EJEMPLO (necesitas ajustar esto a tu lógica de buyOrder):
-        const numeroCompraOriginal = commitResponse.buyOrder.split('-')[1]; // ¡Esto es un ejemplo, ajústalo!
-        const pedido = await new Promise((resolve, reject) => {
-            // Debes tener una función en PedidoModel para buscar por numero_compra
-            // PedidoModel.obtenerPedidoPorNumeroCompra(numeroCompraOriginal, (err, data) => { ... });
-            // Por ahora, asumimos que tienes una forma de obtener el id_pedido.
-            // TEMPORALMENTE, buscaremos el último pedido no pagado para el ejemplo. NO USAR EN PRODUCCIÓN.
-            // En una implementación real, el buyOrder debe estar ligado de forma segura a tu id_pedido.
-             console.warn("[WebpayController] ADVERTENCIA: Lógica de recuperación de pedido es de ejemplo. Implementar correctamente.");
-             db.query("SELECT id_pedido FROM pedido WHERE numero_compra = ? ORDER BY id_pedido DESC LIMIT 1", [numeroCompraOriginal], (err, results) => {
-                 if (err || results.length === 0) return reject(new Error('No se pudo encontrar el pedido original desde buyOrder.'));
-                 resolve({ id_pedido: results[0].id_pedido, id_moneda_pedido: commitResponse.amount === Math.round(commitResponse.amount) ? 1 : 2 /* Lógica de moneda */ }); // Asume moneda 1 (CLP)
-             });
-        });
-        const idPedidoOriginal = pedido.id_pedido;
-        const idMonedaOriginal = pedido.id_moneda_pedido || 1; // Asume CLP por defecto o la moneda del pedido
+            // Extraer y validar los detalles clave de la respuesta de commit defensivamente
+            const commitStatus = commitResponse?.status || 'UNKNOWN';
+            // CORREGIDO: Usar response_code con guion bajo
+            const commitResponseCode = commitResponse?.response_code; // <--- CAMBIO CLAVE AQUÍ
+            const commitBuyOrder = commitResponse?.buy_order || 'N/A';
+            const commitAmount = commitResponse?.amount || 0;
+            const commitAuthorizationCode = commitResponse?.authorization_code || null; // Corregido: authorization_code
+            const commitTransactionDate = commitResponse?.transaction_date || new Date().toISOString(); // Corregido: transaction_date
 
-        if (commitResponse.status === 'AUTHORIZED' && commitResponse.responseCode === 0) {
-            // PAGO APROBADO
-            console.log(`[WebpayController] Pago APROBADO para buyOrder: ${commitResponse.buyOrder}, monto: ${commitResponse.amount}`);
 
-            // 1. Actualizar estado del pedido
-            await new Promise((resolve, reject) => {
-                PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 3 }, (err, result) => { // Asume 3 = 'Pagado'
-                    if (err) return reject(err);
-                    resolve(result);
-                });
-            });
+            // NUEVO CONSOLE.LOG para depurar tipos de datos
+            console.log(`[WebpayController] Tipo de commitResponse.status: ${typeof commitStatus}, valor: ${commitStatus}`);
+            console.log(`[WebpayController] Tipo de commitResponse.response_code: ${typeof commitResponseCode}, valor: ${commitResponseCode}`); // Corregido el log
 
-            // 2. Crear registro de pago
-            const datosPago = {
-                id_pedido: idPedidoOriginal,
-                id_metodo: ID_METODO_PAGO_WEBPAY,
-                estado: 'Completado',
-                fecha_pago: commitResponse.transactionDate, // Formato: YYYY-MM-DDTHH:mm:ss.sssZ
-                monto: commitResponse.amount,
-                referencia_transaccion: commitResponse.authorizationCode, // Código de autorización
-                comprobante_url: null, // Opcional
-                id_moneda: idMonedaOriginal // Usar la moneda del pedido
+
+            // Definir el éxito de la transacción
+            // CORREGIDO: Usar commitResponseCode para la condición
+            isTransactionSuccessful = (commitStatus === 'AUTHORIZED' && commitResponseCode === 0);
+
+            // Capturar detalles para usar después
+            transactionDetails = {
+                status: commitStatus,
+                responseCode: commitResponseCode, // Usar el nombre corregido aquí también
+                buyOrder: commitBuyOrder,
+                amount: commitAmount,
+                authorizationCode: commitAuthorizationCode,
+                transactionDate: commitTransactionDate
             };
-            await new Promise((resolve, reject) => {
-                PagoModel.crearPago(datosPago, (err, result) => {
-                    if (err) return reject(err);
-                    resolve(result);
-                });
-            });
-            redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=exito&orden=${commitResponse.buyOrder}&monto=${commitResponse.amount}`;
-        } else {
-            // PAGO RECHAZADO o con error
-            console.log(`[WebpayController] Pago RECHAZADO/ERROR para buyOrder: ${commitResponse.buyOrder}, status: ${commitResponse.status}, responseCode: ${commitResponse.responseCode}`);
-            await new Promise((resolve, reject) => { // Actualizar pedido a 'Pago Fallido' (ej. id_estado = 8)
-                PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 8 }, (err, result) => {
-                     if (err) console.error("Error actualizando pedido a fallido:", err); // No rechazar para poder redirigir
-                    resolve(result);
-                });
-            });
-            const mensajeError = encodeURIComponent(`Pago rechazado. Código: ${commitResponse.responseCode}. Intente nuevamente.`);
-            redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=fallido&orden=${commitResponse.buyOrder}&mensaje=${mensajeError}`;
-        }
-        res.redirect(redirectUrl);
 
-    } catch (error) {
-        console.error("[WebpayController] Error crítico en el retorno/commit de Webpay:", error);
-        redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&mensaje=Error%20procesando%20el%20pago`;
-        res.redirect(redirectUrl); // Redirigir a una página de error en el frontend
+
+            // Buscar el pedido en la BD (esto siempre se hace si hay tokenWs)
+            const numeroCompraOriginal = transactionDetails.buyOrder; 
+            if (!numeroCompraOriginal || numeroCompraOriginal === 'N/A') {
+                console.error("[WebpayController] ERROR CRÍTICO: El buy_order de la respuesta de Transbank es inválido.");
+                throw new Error("No se pudo obtener el número de compra de la respuesta de Transbank.");
+            }
+            
+            console.log(`[WebpayController] En flujo de Confirmación, buscando pedido por numero_compra: "${numeroCompraOriginal}"`);
+            
+            let pedido = null;
+            let idPedidoOriginal = null;
+            let idMonedaOriginal = 1;
+
+            try {
+                pedido = await new Promise((resolve, reject) => {
+                    db.query("SELECT id_pedido, id_moneda FROM pedido WHERE numero_compra = ? ORDER BY id_pedido DESC LIMIT 1", [numeroCompraOriginal], (err, results) => {
+                        if (err) {
+                            console.error("[WebpayController] ERROR en consulta DB al buscar pedido para CONFIRMACIÓN:", err);
+                            return reject(new Error(`Error en la consulta DB: ${err.message}`));
+                        }
+                        if (results.length === 0) {
+                            console.warn(`[WebpayController] Pedido para confirmación con numero_compra "${numeroCompraOriginal}" NO ENCONTRADO en la BD.`);
+                            return reject(new Error('No se pudo encontrar el pedido original desde buyOrder.'));
+                        }
+                        console.log(`[WebpayController] Pedido para confirmación con numero_compra "${numeroCompraOriginal}" ENCONTRADO. ID: ${results[0].id_pedido}`);
+                        resolve({ id_pedido: results[0].id_pedido, id_moneda_pedido: results[0].id_moneda });
+                    });
+                });
+                idPedidoOriginal = pedido.id_pedido;
+                idMonedaOriginal = pedido.id_moneda_pedido;
+            } catch (pedidoError) {
+                console.error("[WebpayController] ADVERTENCIA: Error al recuperar id_pedido desde buyOrder. ", pedidoError.message);
+                throw new Error(`Error al mapear buyOrder ("${numeroCompraOriginal}") a un pedido existente: ${pedidoError.message}`);
+            }
+
+            // --- Lógica de Actualización de Pedido y Creación de Pago (basada en isTransactionSuccessful) ---
+            if (isTransactionSuccessful) {
+                console.log(`[WebpayController] Pago APROBADO para buyOrder: ${transactionDetails.buyOrder}, monto: ${transactionDetails.amount}`);
+
+                await new Promise((resolve, reject) => {
+                    PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 3 }, (err, result) => { 
+                        if (err) return reject(err);
+                        resolve(result);
+                    });
+                });
+
+                const datosPago = {
+                    id_pedido: idPedidoOriginal,
+                    id_metodo: ID_METODO_PAGO_WEBPAY,
+                    estado: 'Completado',
+                    fecha_pago: transactionDetails.transactionDate,
+                    monto: transactionDetails.amount,
+                    referencia_transaccion: transactionDetails.authorizationCode,
+                    comprobante_url: null,
+                    id_moneda: idMonedaOriginal
+                };
+                await new Promise((resolve, reject) => {
+                    PagoModel.crearPago(datosPago, (err, result) => { 
+                        if (err) return reject(err);
+                        resolve(result);
+                    });
+                });
+                redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=exito&orden=${transactionDetails.buyOrder}&monto=${transactionDetails.amount}`;
+            } else {
+                console.log(`[WebpayController] Pago RECHAZADO/ERROR para buyOrder: ${transactionDetails.buyOrder}, status: ${transactionDetails.status}, responseCode: ${transactionDetails.responseCode}`);
+                await new Promise((resolve, reject) => {
+                    // Actualizar pedido a 'Pago Fallido' (id_estado = 8)
+                    PedidoModel.actualizarPedido(idPedidoOriginal, { id_estado: 8, comentarios: `Pago rechazado. Código: ${transactionDetails.responseCode}. Transbank Status: ${transactionDetails.status}` }, (err, result) => { 
+                         if (err) console.error("Error actualizando pedido a fallido:", err);
+                        resolve(result);
+                    });
+                });
+                const mensajeError = encodeURIComponent(`Pago rechazado. Código: ${transactionDetails.responseCode}. Intente nuevamente.`);
+                redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=fallido&orden=${transactionDetails.buyOrder}&mensaje=${mensajeError}`;
+            }
+            res.redirect(redirectUrl);
+
+        } catch (error) {
+            console.error("[WebpayController] Error crítico en el flujo de confirmación de Webpay:", error);
+            const errorBuyOrder = commitResponse?.buy_order || 'N/A';
+            const errorMessage = encodeURIComponent(`Error procesando el pago. Detalles: ${error.message}`);
+            redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&orden=${errorBuyOrder}&mensaje=${errorMessage}`;
+            res.redirect(redirectUrl);
+        }
+    } else { 
+        console.error("[WebpayController] Ni TBK_TOKEN ni token_ws recibidos. Flujo de retorno no reconocido o URL malformada.");
+        redirectUrl = `${FRONTEND_URL}/pago/resultado?estado=error&mensaje=Error%20en%20el%20retorno%20de%20Transbank.%20No%20se%20recibieron%20tokens.`;
+        return res.redirect(redirectUrl);
     }
 };

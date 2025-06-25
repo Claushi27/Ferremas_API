@@ -8,5 +8,6 @@ router.get('/', usuarioController.obtenerTodos);      // GET /usuarios
 router.get('/:id', usuarioController.obtenerPorId);   // GET /usuarios/:id
 router.put('/:id', usuarioController.actualizar);     // PUT /usuarios/:id (o PATCH)
 router.delete('/:id', usuarioController.eliminar);    // DELETE /usuarios/:id
+router.patch('/:id', usuarioController.actualizar);
 
 module.exports = router;

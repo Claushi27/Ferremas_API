@@ -23,5 +23,6 @@ router.put('/:id', promocionController.actualizar);
 // Eliminar una promoción
 // router.delete('/:id', authMiddleware, authorizeMiddleware(['Administrador']), promocionController.eliminar);
 router.delete('/:id', promocionController.eliminar);
+router.patch('/:id', promocionController.actualizar);
 
 module.exports = router;
