@@ -3,15 +3,18 @@ const { Pool } = require('pg');
 const dotenv = require('dotenv'); // dotenv se importa aquí
 dotenv.config(); // Y se configura aquí
 
+// Usar la URL completa de conexión para mayor compatibilidad
+const connectionString = process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
+  connectionString: connectionString,
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  // Forzar IPv4
+  family: 4,
+  // Timeout de conexión
+  connectionTimeoutMillis: 10000
 });
 
 pool.connect((err, client, release) => {
