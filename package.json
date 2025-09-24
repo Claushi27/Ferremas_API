@@ -19,6 +19,7 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.3",
+    "@supabase/supabase-js": "^2.39.7",
     "transbank-sdk": "^6.0.0"
   }
 }

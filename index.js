@@ -4,7 +4,8 @@ require('dotenv').config(); // Correcto, al principio
 const express = require('express');
 const app = express();
 const cors = require('cors'); // <--- ADD THIS LINE
-const db = require('./config/db'); // Importante si lo usas en controladores como en el ejemplo de Webpay
+const db = require('./config/db'); // PostgreSQL (mantener para compatibilidad)
+const supabase = require('./config/supabase'); // Supabase cliente
 
 // Tus Rutas Existentes
 const authRoutes = require('./routes/authRoutes');
