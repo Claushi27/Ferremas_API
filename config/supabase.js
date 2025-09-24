@@ -11,13 +11,22 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Probar la conexión
 async function testConnection() {
   try {
-    // Usar una consulta más simple que no requiere tablas específicas
-    const { data, error } = await supabase.rpc('version'); // Función incorporada de PostgreSQL
+    console.log('🔍 Probando conexión a Supabase...');
+    console.log('🌐 URL:', supabaseUrl);
+    console.log('🔑 Key (primeros 20):', supabaseKey.substring(0, 20) + '...');
+
+    // Probar con una consulta simple a una tabla conocida
+    const { data, error } = await supabase
+      .from('producto')
+      .select('count(*)')
+      .limit(1);
+
     if (error) {
-      console.log('🔄 Supabase conectado pero sin acceso a funciones RPC (normal con anon key)');
-      console.log('✅ Conectado a Supabase API correctamente');
+      console.error('❌ Error en test de Supabase:', error.message);
+      console.log('🔄 Pero el cliente está configurado correctamente');
     } else {
-      console.log('✅ Conectado a Supabase correctamente:', data);
+      console.log('✅ Conectado a Supabase API correctamente');
+      console.log('📊 Test query exitosa:', data);
     }
   } catch (err) {
     console.error('❌ Error de conexión a Supabase:', err.message);

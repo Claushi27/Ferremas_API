@@ -4,31 +4,36 @@ const supabase = require('../config/supabase');
 // Obtener todos los productos usando Supabase
 exports.obtenerTodos = async (req, res) => {
     try {
+        console.log('🔍 Iniciando obtenerTodos productos con Supabase...');
+
         const { data, error } = await supabase
             .from('producto')
-            .select(`
-                *,
-                categoria_producto (
-                    id_categoria,
-                    nombre_categoria
-                )
-            `)
+            .select('*')
             .order('id_producto', { ascending: true });
 
+        console.log('📊 Respuesta Supabase:', {
+            dataLength: data?.length,
+            error: error?.message,
+            errorCode: error?.code
+        });
+
         if (error) {
-            console.error('Error Supabase obtenerTodos productos:', error);
+            console.error('❌ Error Supabase obtenerTodos productos:', error);
             return res.status(500).json({
                 error: 'Error al obtener productos',
-                details: error.message
+                details: error.message,
+                code: error.code
             });
         }
 
+        console.log('✅ Productos obtenidos exitosamente:', data?.length || 0);
         res.status(200).json(data || []);
     } catch (err) {
-        console.error('Error servidor obtenerTodos productos:', err);
+        console.error('❌ Error servidor obtenerTodos productos:', err);
         res.status(500).json({
             error: 'Error interno del servidor',
-            details: err.message
+            details: err.message,
+            stack: err.stack
         });
     }
 };

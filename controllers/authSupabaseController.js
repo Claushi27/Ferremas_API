@@ -6,24 +6,26 @@ const jwt = require('jsonwebtoken');
 // Login usando Supabase
 exports.login = async (req, res) => {
     try {
+        console.log('🔍 Iniciando login con Supabase...');
         const { email, password } = req.body;
+
+        console.log('📝 Datos recibidos:', { email, hasPassword: !!password });
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email y contraseña son requeridos' });
         }
 
-        // Buscar usuario por email
+        // Buscar usuario por email - sin join por ahora
         const { data: usuario, error } = await supabase
             .from('usuario')
-            .select(`
-                *,
-                rol (
-                    id_rol,
-                    nombre_rol
-                )
-            `)
+            .select('*')
             .eq('email', email)
             .single();
+
+        console.log('📊 Respuesta Supabase usuario:', {
+            found: !!usuario,
+            error: error?.message
+        });
 
         if (error) {
             if (error.code === 'PGRST116') {
