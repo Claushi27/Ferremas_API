@@ -3,35 +3,62 @@ const UsuarioModel = require('../models/usuarioModel');
 const jwt = require('jsonwebtoken'); // Si decides usar JWT
 
 exports.login = (req, res) => {
-  // Cambiado de 'username' a 'nombre_usuario' para coincidir con la BD de sistema_compras
-  const { nombre_usuario, contrasena } = req.body;
+  // Aceptar tanto 'username' como 'nombre_usuario' para compatibilidad con frontend
+  const { username, nombre_usuario, password, contrasena } = req.body;
+  const user = username || nombre_usuario;
+  const pass = password || contrasena;
 
-  if (!nombre_usuario || !contrasena) {
-    return res.status(400).json({ error: 'Faltan nombre_usuario o contrasena' });
+  if (!user || !pass) {
+    return res.status(400).json({
+      success: false,
+      message: 'Faltan credenciales'
+    });
   }
 
-  UsuarioModel.verificarCredenciales(nombre_usuario, contrasena, (err, usuario) => {
+  UsuarioModel.verificarCredenciales(user, pass, (err, usuario) => {
     if (err) {
       console.error("Error en login (verificarCredenciales):", err);
-      return res.status(500).json({ error: 'Error interno del servidor durante el login' });
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor durante el login'
+      });
     }
 
     if (usuario) {
-      // Usuario autenticado correctamente
-      // Opcional: Generar un token JWT
-      // const token = jwt.sign(
-      //   { id_usuario: usuario.id_usuario, nombre_usuario: usuario.nombre_usuario, id_rol: usuario.id_rol },
-      //   process.env.JWT_SECRET, // Asegúrate de tener JWT_SECRET en tu .env
-      //   { expiresIn: '1h' } // El token expira en 1 hora
-      // );
-      // return res.status(200).json({ message: 'Inicio de sesión exitoso', usuario: usuario, token: token });
-      
-      // Sin JWT por ahora:
-      return res.status(200).json({ message: 'Inicio de sesión exitoso', usuario: usuario });
+      // Mapear rol para frontend
+      let roleMap = {
+        1: 'admin',
+        2: 'vendedor',
+        3: 'bodeguero',
+        4: 'contador',
+        5: 'cliente'
+      };
+
+      // Generar token simple (puedes usar JWT después)
+      const token = 'token_' + Date.now() + '_' + usuario.id_usuario;
+
+      const userData = {
+        id: usuario.id_usuario,
+        username: usuario.nombre_usuario,
+        email: usuario.correo,
+        role: roleMap[usuario.id_rol] || 'usuario',
+        roleId: usuario.id_rol
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: 'Inicio de sesión exitoso',
+        data: {
+          user: userData,
+          token: token
+        }
+      });
 
     } else {
-      // Credenciales incorrectas (usuario no encontrado o contraseña no coincide)
-      return res.status(401).json({ message: 'Credenciales incorrectas' });
+      return res.status(401).json({
+        success: false,
+        message: 'Credenciales incorrectas'
+      });
     }
   });
 };

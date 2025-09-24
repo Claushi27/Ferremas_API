@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Proyectos/Ferremas/**)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(npm start)",
+      "Bash(mysql:*)",
+      "Read(//c/Proyectos/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
