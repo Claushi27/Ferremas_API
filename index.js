@@ -48,6 +48,24 @@ app.use('/api/pagos/webpay', webpayRoutes);
 app.use('/api/pagos', pagoRoutes);
 app.use('/api/metodos-pago', metodoPagoRoutes);
 
+// Ruta raíz para evitar 404
+app.get('/', (req, res) => {
+  res.json({
+    message: 'FERREMAS API está funcionando correctamente',
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// Manejar rutas no encontradas
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Ruta no encontrada',
+    message: 'La ruta solicitada no existe en la API'
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
