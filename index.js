@@ -24,6 +24,7 @@ const metodoPagoRoutes = require('./routes/metodoPagoRoutes');
 
 const promocionRoutes = require('./routes/promocionRoutes');    // Para el CRUD de Promociones
 const webpayRoutes = require('./routes/webpayRoutes');        // Para la integración con Webpay
+const supabaseRoutes = require('./routes/supabaseRoutes');  // Rutas usando Supabase
 
 app.use(express.json()); // Para parsear JSON
 app.use(express.urlencoded({ extended: true })); // Para parsear cuerpos de formularios (importante para el retorno de Webpay)
@@ -32,7 +33,10 @@ app.use(express.urlencoded({ extended: true })); // Para parsear cuerpos de form
 // In a production environment, you should restrict this to your specific frontend domain.
 app.use(cors()); // <--- ADD THIS LINE (after body-parser middleware, before your routes)
 
-// API Endpoints
+// API Endpoints con Supabase (prioritarios)
+app.use('/api', supabaseRoutes);
+
+// API Endpoints originales (fallback)
 app.use('/api/login', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/test', testRoutes);
