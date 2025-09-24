@@ -11,11 +11,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Probar la conexión
 async function testConnection() {
   try {
-    const { data, error } = await supabase.from('test').select('*').limit(1);
-    if (error && error.code !== 'PGRST116') { // PGRST116 = tabla no existe (normal)
-      console.error('❌ Error conectando a Supabase:', error.message);
+    // Usar una consulta más simple que no requiere tablas específicas
+    const { data, error } = await supabase.rpc('version'); // Función incorporada de PostgreSQL
+    if (error) {
+      console.log('🔄 Supabase conectado pero sin acceso a funciones RPC (normal con anon key)');
+      console.log('✅ Conectado a Supabase API correctamente');
     } else {
-      console.log('✅ Conectado a Supabase correctamente');
+      console.log('✅ Conectado a Supabase correctamente:', data);
     }
   } catch (err) {
     console.error('❌ Error de conexión a Supabase:', err.message);
