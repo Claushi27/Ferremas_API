@@ -26,8 +26,20 @@ exports.obtenerTodos = async (req, res) => {
             });
         }
 
-        console.log('✅ Productos obtenidos exitosamente:', data?.length || 0);
-        res.status(200).json(data || []);
+        // Transformar datos para coincidir con el formato esperado por el frontend
+        const productosTransformados = data?.map(producto => ({
+            id_interno_db: producto.id_producto,
+            Nombre: producto.nombre,
+            Marca: producto.marca,
+            Precio: [{ Valor: producto.precio }],
+            Stock: 10, // Por ahora un valor fijo
+            imagenes: producto.imagen_url ? [{ url_imagen: producto.imagen_url }] : [],
+            // Mantener también los datos originales para referencia
+            ...producto
+        })) || [];
+
+        console.log('✅ Productos transformados exitosamente:', productosTransformados.length);
+        res.status(200).json(productosTransformados);
     } catch (err) {
         console.error('❌ Error servidor obtenerTodos productos:', err);
         res.status(500).json({

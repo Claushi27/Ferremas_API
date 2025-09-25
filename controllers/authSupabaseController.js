@@ -60,9 +60,12 @@ exports.login = async (req, res) => {
         const { password_hash, ...usuarioSinPassword } = usuario;
 
         res.status(200).json({
+            success: true,
             message: 'Login exitoso',
-            token,
-            usuario: usuarioSinPassword
+            data: {
+                user: usuarioSinPassword,
+                token
+            }
         });
 
     } catch (err) {
