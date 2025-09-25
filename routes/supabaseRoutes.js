@@ -11,7 +11,7 @@ router.get('/test-supabase', async (req, res) => {
         const supabase = require('../config/supabase');
         const { data, error } = await supabase
             .from('producto')
-            .select('count()')
+            .select('id_producto, nombre')
             .limit(1);
 
         if (error) {

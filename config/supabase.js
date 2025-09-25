@@ -18,7 +18,7 @@ async function testConnection() {
     // Probar con una consulta simple a una tabla conocida
     const { data, error } = await supabase
       .from('producto')
-      .select('count(*)')
+      .select('id_producto')
       .limit(1);
 
     if (error) {
