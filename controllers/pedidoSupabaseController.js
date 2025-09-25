@@ -10,10 +10,7 @@ exports.crear = async (req, res) => {
         const {
             id_cliente,
             items,
-            total,
-            direccion_entrega,
-            tipo_entrega = 1,
-            metodo_pago = 1
+            total
         } = req.body;
 
         if (!id_cliente || !items || !Array.isArray(items) || items.length === 0) {
@@ -22,18 +19,33 @@ exports.crear = async (req, res) => {
             });
         }
 
+        // Calcular total de los items
+        const totalCalculado = items.reduce((sum, item) => {
+            const precio = item.precio || item.price || 0;
+            const cantidad = item.cantidad || item.quantity || 1;
+            return sum + (precio * cantidad);
+        }, 0);
+
+        // Generar número de compra único
+        const numeroCompra = `FER-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
         // Crear el pedido principal
         const { data: pedido, error: errorPedido } = await supabase
             .from('pedido')
             .insert([
                 {
                     id_cliente,
-                    fecha_pedido: new Date().toISOString(),
-                    total: total || 0,
-                    direccion_entrega: direccion_entrega || 'Dirección por definir',
-                    id_estado_pedido: 1, // Estado inicial
-                    id_tipo_entrega: tipo_entrega,
-                    id_metodo_pago: metodo_pago
+                    id_tipo: 1, // Retiro en tienda por defecto
+                    id_sucursal: 1, // Sucursal por defecto
+                    fecha: new Date().toISOString().split('T')[0], // Solo fecha
+                    id_estado: 1, // Estado inicial (Pendiente)
+                    numero_compra: numeroCompra,
+                    id_moneda: 1, // CLP por defecto
+                    total_sin_impuesto: totalCalculado,
+                    impuesto: totalCalculado * 0.19, // IVA 19%
+                    total_con_impuesto: totalCalculado * 1.19,
+                    descuento: 0,
+                    comentarios: 'Pedido creado desde API'
                 }
             ])
             .select()
@@ -50,13 +62,18 @@ exports.crear = async (req, res) => {
         console.log('✅ Pedido creado:', pedido.id_pedido);
 
         // Crear los detalles del pedido
-        const detalles = items.map(item => ({
-            id_pedido: pedido.id_pedido,
-            id_producto: item.id_producto || item.id,
-            cantidad: item.cantidad || item.quantity || 1,
-            precio_unitario: item.precio || item.price || 0,
-            subtotal: (item.cantidad || 1) * (item.precio || item.price || 0)
-        }));
+        const detalles = items.map(item => {
+            const cantidad = item.cantidad || item.quantity || 1;
+            const precio = item.precio || item.price || 0;
+            return {
+                id_pedido: pedido.id_pedido,
+                id_producto: item.id_producto || item.id,
+                cantidad,
+                precio_unitario: precio,
+                descuento_item: 0,
+                subtotal: cantidad * precio
+            };
+        });
 
         const { data: detallesPedido, error: errorDetalles } = await supabase
             .from('detalle_pedido')
