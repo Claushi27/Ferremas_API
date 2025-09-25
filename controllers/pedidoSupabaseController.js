@@ -10,17 +10,33 @@ exports.crear = async (req, res) => {
         const {
             id_cliente,
             items,
-            total
+            total,
+            cabecera,
+            detalles
         } = req.body;
 
-        if (!id_cliente || !items || !Array.isArray(items) || items.length === 0) {
+        // Manejar tanto formato nuevo como formato del frontend
+        let clienteId = id_cliente;
+        let itemsArray = items;
+
+        if (cabecera && detalles) {
+            // Frontend envía formato: {cabecera: {...}, detalles: [...]}
+            clienteId = cabecera.id_cliente;
+            itemsArray = detalles.map(detalle => ({
+                id_producto: detalle.id_producto,
+                cantidad: detalle.cantidad,
+                precio: detalle.precio_unitario || detalle.precio || 0
+            }));
+        }
+
+        if (!clienteId || !itemsArray || !Array.isArray(itemsArray) || itemsArray.length === 0) {
             return res.status(400).json({
-                error: 'Faltan datos requeridos: id_cliente, items'
+                error: 'Faltan datos requeridos: id_cliente/cabecera, items/detalles'
             });
         }
 
         // Calcular total de los items
-        const totalCalculado = items.reduce((sum, item) => {
+        const totalCalculado = itemsArray.reduce((sum, item) => {
             const precio = item.precio || item.price || 0;
             const cantidad = item.cantidad || item.quantity || 1;
             return sum + (precio * cantidad);
@@ -34,10 +50,10 @@ exports.crear = async (req, res) => {
             .from('pedido')
             .insert([
                 {
-                    id_cliente,
-                    id_tipo: 1, // Retiro en tienda por defecto
-                    id_sucursal: 1, // Sucursal por defecto
-                    fecha: new Date().toISOString().split('T')[0], // Solo fecha
+                    id_cliente: clienteId,
+                    id_tipo: cabecera?.id_tipo || 1, // Usar dato del frontend o default
+                    id_sucursal: cabecera?.id_sucursal || 1, // Usar dato del frontend o default
+                    fecha: cabecera?.fecha || new Date().toISOString().split('T')[0], // Usar fecha del frontend
                     id_estado: 1, // Estado inicial (Pendiente)
                     numero_compra: numeroCompra,
                     id_moneda: 1, // CLP por defecto
@@ -62,7 +78,7 @@ exports.crear = async (req, res) => {
         console.log('✅ Pedido creado:', pedido.id_pedido);
 
         // Crear los detalles del pedido
-        const detalles = items.map(item => {
+        const detallesPedido = itemsArray.map(item => {
             const cantidad = item.cantidad || item.quantity || 1;
             const precio = item.precio || item.price || 0;
             return {
@@ -75,16 +91,16 @@ exports.crear = async (req, res) => {
             };
         });
 
-        const { data: detallesPedido, error: errorDetalles } = await supabase
+        const { data: detallesCreados, error: errorDetalles } = await supabase
             .from('detalle_pedido')
-            .insert(detalles)
+            .insert(detallesPedido)
             .select();
 
         if (errorDetalles) {
             console.error('❌ Error creando detalles:', errorDetalles);
             // El pedido ya se creó, pero falló el detalle
         } else {
-            console.log('✅ Detalles creados:', detallesPedido.length);
+            console.log('✅ Detalles creados:', detallesCreados?.length || 0);
         }
 
         res.status(201).json({
@@ -92,7 +108,7 @@ exports.crear = async (req, res) => {
             message: 'Pedido creado exitosamente',
             data: {
                 pedido,
-                detalles: detallesPedido || []
+                detalles: detallesCreados || []
             }
         });
 
