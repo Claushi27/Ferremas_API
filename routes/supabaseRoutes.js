@@ -96,6 +96,39 @@ router.post('/actualizar-admin-password', async (req, res) => {
     }
 });
 
+// ENDPOINT DEBUG - Capturar datos exactos del frontend
+router.post('/debug-login', async (req, res) => {
+    console.log('🔍 DEBUG LOGIN - Headers recibidos:', req.headers);
+    console.log('🔍 DEBUG LOGIN - Body recibido:', req.body);
+    console.log('🔍 DEBUG LOGIN - Raw body type:', typeof req.body);
+    console.log('🔍 DEBUG LOGIN - Content-Type:', req.get('Content-Type'));
+
+    res.json({
+        message: 'Debug data captured',
+        headers: req.headers,
+        body: req.body,
+        bodyType: typeof req.body,
+        contentType: req.get('Content-Type'),
+        timestamp: new Date().toISOString()
+    });
+});
+
+router.post('/debug-pedidos', async (req, res) => {
+    console.log('🔍 DEBUG PEDIDOS - Headers recibidos:', req.headers);
+    console.log('🔍 DEBUG PEDIDOS - Body recibido:', req.body);
+    console.log('🔍 DEBUG PEDIDOS - Raw body type:', typeof req.body);
+    console.log('🔍 DEBUG PEDIDOS - Content-Type:', req.get('Content-Type'));
+
+    res.json({
+        message: 'Debug pedidos data captured',
+        headers: req.headers,
+        body: req.body,
+        bodyType: typeof req.body,
+        contentType: req.get('Content-Type'),
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Rutas de productos usando Supabase
 router.get('/productos', productoSupabaseController.obtenerTodos);
 router.get('/productos/buscar', productoSupabaseController.buscar);
