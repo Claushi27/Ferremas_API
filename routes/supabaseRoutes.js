@@ -72,6 +72,30 @@ router.post('/crear-admin', async (req, res) => {
     }
 });
 
+// Endpoint temporal para actualizar contraseña de admin
+router.post('/actualizar-admin-password', async (req, res) => {
+    try {
+        const bcrypt = require('bcrypt');
+        const supabase = require('../config/supabase');
+
+        const passwordHash = await bcrypt.hash('admin123', 10);
+
+        const { data, error } = await supabase
+            .from('usuario')
+            .update({ contrasena: passwordHash })
+            .eq('correo', 'admin@ferremas.cl')
+            .select();
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ message: 'Contraseña de admin actualizada a admin123', usuario: data });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Rutas de productos usando Supabase
 router.get('/productos', productoSupabaseController.obtenerTodos);
 router.get('/productos/buscar', productoSupabaseController.buscar);
