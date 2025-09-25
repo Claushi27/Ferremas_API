@@ -7,19 +7,22 @@ const jwt = require('jsonwebtoken');
 exports.login = async (req, res) => {
     try {
         console.log('🔍 Iniciando login con Supabase...');
-        const { email, password } = req.body;
+        const { email, username, password } = req.body;
 
-        console.log('📝 Datos recibidos:', { email, hasPassword: !!password });
+        // Aceptar tanto email como username (para compatibilidad frontend)
+        const emailToUse = email || username;
 
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+        console.log('📝 Datos recibidos:', { email, username, emailToUse, hasPassword: !!password });
+
+        if (!emailToUse || !password) {
+            return res.status(400).json({ error: 'Email/username y contraseña son requeridos' });
         }
 
         // Buscar usuario por correo - estructura real de Supabase
         const { data: usuario, error } = await supabase
             .from('usuario')
             .select('*')
-            .eq('correo', email)
+            .eq('correo', emailToUse)
             .single();
 
         console.log('📊 Respuesta Supabase usuario:', {
@@ -80,11 +83,14 @@ exports.login = async (req, res) => {
 // Registro usando Supabase
 exports.register = async (req, res) => {
     try {
-        const { nombre, apellido, email, password, telefono } = req.body;
+        const { nombre, apellido, email, username, password, telefono } = req.body;
 
-        if (!nombre || !apellido || !email || !password) {
+        // Aceptar tanto email como username
+        const emailToUse = email || username;
+
+        if (!nombre || !apellido || !emailToUse || !password) {
             return res.status(400).json({
-                error: 'Nombre, apellido, email y contraseña son requeridos'
+                error: 'Nombre, apellido, email/username y contraseña son requeridos'
             });
         }
 
@@ -92,7 +98,7 @@ exports.register = async (req, res) => {
         const { data: usuarioExistente } = await supabase
             .from('usuario')
             .select('id_usuario')
-            .eq('correo', email)
+            .eq('correo', emailToUse)
             .single();
 
         if (usuarioExistente) {
@@ -109,7 +115,7 @@ exports.register = async (req, res) => {
             .insert([
                 {
                     nombre_usuario: `${nombre} ${apellido}`,
-                    correo: email,
+                    correo: emailToUse,
                     contrasena: passwordHash,
                     id_rol: 2 // Rol cliente por defecto
                 }
