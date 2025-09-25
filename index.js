@@ -36,21 +36,23 @@ app.use(cors()); // <--- ADD THIS LINE (after body-parser middleware, before you
 // API Endpoints con Supabase (prioritarios)
 app.use('/api', supabaseRoutes);
 
-// API Endpoints originales (fallback)
-app.use('/api/login', authRoutes);
+// API Endpoints originales (COMENTADOS - usar solo Supabase)
+// app.use('/api/login', authRoutes);  // CONFLICTO: usar supabaseRoutes
+// app.use('/api/productos', productoRoutes);  // CONFLICTO: usar supabaseRoutes
+// app.use('/api/pedidos', pedidoRoutes);  // CONFLICTO: usar supabaseRoutes
+// app.use('/api/pagos/webpay', webpayRoutes);  // CONFLICTO: usar supabaseRoutes
+
+// Rutas no migradas aún (mantener activas)
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/test', testRoutes);
-app.use('/api/productos', productoRoutes);
 app.use('/api/categorias-producto', categoriaProductoRoutes);
 app.use('/api/sucursales', sucursalRoutes);
 app.use('/api/inventario', inventarioSucursalRoutes);
-app.use('/api/pedidos', pedidoRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/consultas', consultaClienteRoutes);
 app.use('/api/tasas-cambio', tasaCambioRoutes);
-app.use('/api/promociones', promocionRoutes);        
-app.use('/api/pagos/webpay', webpayRoutes);    
-app.use('/api/pagos', pagoRoutes);
+app.use('/api/promociones', promocionRoutes);
+app.use('/api/pagos-old', pagoRoutes);  // Renombrado para evitar conflicto
 app.use('/api/metodos-pago', metodoPagoRoutes);
 
 // Ruta raíz para evitar 404
