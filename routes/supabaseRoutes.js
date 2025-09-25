@@ -147,4 +147,44 @@ router.post('/pagos/webpay/crear', webpaySupabaseController.crearTransaccion);
 router.post('/pagos/webpay/retorno', webpaySupabaseController.retornoWebpay);
 router.get('/pagos/webpay/retorno', webpaySupabaseController.retornoWebpay); // También GET para compatibilidad
 
+// Endpoint simple para redirigir al último pedido a Webpay
+router.get('/pagar-ultimo-pedido', async (req, res) => {
+    try {
+        const supabase = require('../config/supabase');
+
+        // Obtener el último pedido
+        const { data: ultimoPedido, error } = await supabase
+            .from('pedido')
+            .select('id_pedido')
+            .order('fecha_actualizacion', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error || !ultimoPedido) {
+            return res.status(404).json({ error: 'No se encontró ningún pedido' });
+        }
+
+        // Crear transacción Webpay
+        const webpayResponse = await fetch(`${req.protocol}://${req.get('host')}/api/pagos/webpay/crear`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_pedido: ultimoPedido.id_pedido })
+        });
+
+        const webpayData = await webpayResponse.json();
+
+        if (!webpayData.url_webpay || !webpayData.token_ws) {
+            return res.status(500).json({ error: 'Error creando transacción Webpay' });
+        }
+
+        // Redirigir directamente a Webpay
+        const webpayUrl = `${webpayData.url_webpay}?token_ws=${webpayData.token_ws}`;
+        res.redirect(webpayUrl);
+
+    } catch (err) {
+        console.error('Error en pagar-ultimo-pedido:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
