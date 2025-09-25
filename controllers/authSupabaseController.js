@@ -148,9 +148,12 @@ exports.register = async (req, res) => {
         const { password_hash, ...usuarioSinPassword } = nuevoUsuario;
 
         res.status(201).json({
+            success: true,
             message: 'Usuario registrado exitosamente',
-            token,
-            usuario: usuarioSinPassword
+            data: {
+                user: usuarioSinPassword,
+                token
+            }
         });
 
     } catch (err) {
