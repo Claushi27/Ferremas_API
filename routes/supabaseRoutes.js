@@ -5,6 +5,7 @@ const router = express.Router();
 const productoSupabaseController = require('../controllers/productoSupabaseController');
 const authSupabaseController = require('../controllers/authSupabaseController');
 const pedidoSupabaseController = require('../controllers/pedidoSupabaseController');
+const webpaySupabaseController = require('../controllers/webpaySupabaseController');
 
 // Ruta de test
 router.get('/test-supabase', async (req, res) => {
@@ -31,7 +32,7 @@ router.get('/test-usuarios', async (req, res) => {
         const supabase = require('../config/supabase');
         const { data, error } = await supabase
             .from('usuario')
-            .select('id_usuario, nombre, email')
+            .select('id_usuario, nombre_usuario, correo')
             .limit(3);
 
         res.json({ usuarios: data, error });
@@ -52,11 +53,9 @@ router.post('/crear-admin', async (req, res) => {
             .from('usuario')
             .insert([
                 {
-                    nombre: 'Admin',
-                    apellido: 'Ferremas',
-                    email: 'admin@ferremas.cl',
-                    password_hash: passwordHash,
-                    telefono: '+56912345678',
+                    nombre_usuario: 'Admin Ferremas',
+                    correo: 'admin@ferremas.cl',
+                    contrasena: passwordHash,
                     id_rol: 1 // Admin
                 }
             ])
@@ -85,5 +84,10 @@ router.post('/register', authSupabaseController.register);
 // Rutas de pedidos usando Supabase
 router.post('/pedidos', pedidoSupabaseController.crear);
 router.get('/pedidos/cliente/:id_cliente', pedidoSupabaseController.obtenerPorCliente);
+
+// Rutas de Webpay usando Supabase
+router.post('/pagos/webpay/crear', webpaySupabaseController.crearTransaccion);
+router.post('/pagos/webpay/retorno', webpaySupabaseController.retornoWebpay);
+router.get('/pagos/webpay/retorno', webpaySupabaseController.retornoWebpay); // También GET para compatibilidad
 
 module.exports = router;

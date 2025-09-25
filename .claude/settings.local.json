@@ -11,7 +11,8 @@
       "Bash(node:*)",
       "Bash(npm start)",
       "Bash(mysql:*)",
-      "Read(//c/Proyectos/**)"
+      "Read(//c/Proyectos/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

@@ -15,11 +15,11 @@ exports.login = async (req, res) => {
             return res.status(400).json({ error: 'Email y contraseña son requeridos' });
         }
 
-        // Buscar usuario por email - sin join por ahora
+        // Buscar usuario por correo - estructura real de Supabase
         const { data: usuario, error } = await supabase
             .from('usuario')
             .select('*')
-            .eq('email', email)
+            .eq('correo', email)
             .single();
 
         console.log('📊 Respuesta Supabase usuario:', {
@@ -39,7 +39,7 @@ exports.login = async (req, res) => {
         }
 
         // Verificar contraseña
-        const passwordValida = await bcrypt.compare(password, usuario.password_hash);
+        const passwordValida = await bcrypt.compare(password, usuario.contrasena);
 
         if (!passwordValida) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -49,7 +49,7 @@ exports.login = async (req, res) => {
         const token = jwt.sign(
             {
                 id: usuario.id_usuario,
-                email: usuario.email,
+                email: usuario.correo,
                 rol: usuario.rol?.nombre_rol
             },
             process.env.JWT_SECRET || 'fallback_secret_key',
@@ -57,7 +57,7 @@ exports.login = async (req, res) => {
         );
 
         // Remover password del response
-        const { password_hash, ...usuarioSinPassword } = usuario;
+        const { contrasena, ...usuarioSinPassword } = usuario;
 
         res.status(200).json({
             success: true,
@@ -92,7 +92,7 @@ exports.register = async (req, res) => {
         const { data: usuarioExistente } = await supabase
             .from('usuario')
             .select('id_usuario')
-            .eq('email', email)
+            .eq('correo', email)
             .single();
 
         if (usuarioExistente) {
@@ -103,16 +103,14 @@ exports.register = async (req, res) => {
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
 
-        // Crear nuevo usuario
+        // Crear nuevo usuario - adaptado a estructura Supabase
         const { data: nuevoUsuario, error } = await supabase
             .from('usuario')
             .insert([
                 {
-                    nombre,
-                    apellido,
-                    email,
-                    password_hash: passwordHash,
-                    telefono,
+                    nombre_usuario: `${nombre} ${apellido}`,
+                    correo: email,
+                    contrasena: passwordHash,
                     id_rol: 2 // Rol cliente por defecto
                 }
             ])
@@ -137,7 +135,7 @@ exports.register = async (req, res) => {
         const token = jwt.sign(
             {
                 id: nuevoUsuario.id_usuario,
-                email: nuevoUsuario.email,
+                email: nuevoUsuario.correo,
                 rol: nuevoUsuario.rol?.nombre_rol
             },
             process.env.JWT_SECRET || 'fallback_secret_key',
@@ -145,7 +143,7 @@ exports.register = async (req, res) => {
         );
 
         // Remover password del response
-        const { password_hash, ...usuarioSinPassword } = nuevoUsuario;
+        const { contrasena, ...usuarioSinPassword } = nuevoUsuario;
 
         res.status(201).json({
             success: true,
